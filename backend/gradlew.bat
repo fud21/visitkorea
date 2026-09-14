@@ -1,7 +1,8 @@
 @echo off
 setlocal
 set GRADLE_VERSION=8.10.2
-set APP_HOME=%~dp0
+set "APP_HOME=%~dp0"
+set "APP_HOME=%APP_HOME:~0,-1%"
 if "%GRADLE_USER_HOME%"=="" set GRADLE_USER_HOME=%USERPROFILE%\.gradle
 set DIST_DIR=%GRADLE_USER_HOME%\wrapper\dists\localon-gradle-%GRADLE_VERSION%
 set GRADLE_HOME=%DIST_DIR%\gradle-%GRADLE_VERSION%
