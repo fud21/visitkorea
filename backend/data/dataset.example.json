@@ -1,0 +1,34 @@
+{
+  "version": "2026-09-14",
+  "regions": [
+    {
+      "type": "MUNICIPALITY",
+      "name": "경주시",
+      "provinceName": "경상북도",
+      "visitorCount": 1200000,
+      "visitorRatio": 14.8
+    }
+  ],
+  "places": [
+    {
+      "id": "sample-place-id",
+      "name": "샘플 장소",
+      "category": "전통시장",
+      "regionName": "경주시",
+      "provinceName": "경상북도",
+      "address": "주소",
+      "description": "데이터팀 통합 데이터 설명",
+      "hours": "09:00-18:00",
+      "closed": "연중무휴",
+      "parking": "가능",
+      "latitude": 35.84,
+      "longitude": 129.21,
+      "localScore": 80,
+      "popularityScore": 60,
+      "stayMinutes": 45,
+      "estimatedCost": 10000,
+      "themes": ["전통시장", "먹거리"],
+      "reasons": ["지역 생활권과 연결되는 장소입니다."]
+    }
+  ]
+}

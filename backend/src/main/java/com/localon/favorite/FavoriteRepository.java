@@ -1,0 +1,1 @@
+package com.localon.favorite; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*; public interface FavoriteRepository extends JpaRepository<Favorite,Long>{List<Favorite> findByUser_IdOrderByCreatedAtDesc(Long userId); Optional<Favorite> findByUser_IdAndPlace_Id(Long userId,String placeId);}

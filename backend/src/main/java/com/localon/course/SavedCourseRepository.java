@@ -1,0 +1,1 @@
+package com.localon.course; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*; public interface SavedCourseRepository extends JpaRepository<SavedCourse,Long>{List<SavedCourse> findByUser_IdOrderByCreatedAtDesc(Long userId); Optional<SavedCourse> findByIdAndUser_Id(Long id,Long userId);}

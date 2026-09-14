@@ -1,11 +1,17 @@
 # Dependencies
 node_modules/
+frontend/node_modules/
 
 # Build
 dist/
+frontend/dist/
+backend/build/
+backend/.gradle/
 
 # Environment
 .env
+frontend/.env
+backend/.env
 .env.local
 .env.*.local
 
@@ -25,3 +31,7 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Local database / imported data
+backend/data/*
+!backend/data/dataset.example.json
