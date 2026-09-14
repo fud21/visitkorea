@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+GRADLE_VERSION="8.10.2"
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+DIST_DIR="$GRADLE_USER_HOME/wrapper/dists/localon-gradle-$GRADLE_VERSION"
+GRADLE_HOME="$DIST_DIR/gradle-$GRADLE_VERSION"
+ZIP_FILE="$DIST_DIR/gradle-$GRADLE_VERSION-bin.zip"
+DIST_URL="https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+
+if [ ! -x "$GRADLE_HOME/bin/gradle" ]; then
+  mkdir -p "$DIST_DIR"
+  echo "Gradle $GRADLE_VERSION not found locally. Downloading it once..."
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 --retry-delay 2 "$DIST_URL" -o "$ZIP_FILE"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$ZIP_FILE" "$DIST_URL"
+  else
+    echo "Error: curl or wget is required for the first Gradle bootstrap." >&2
+    exit 1
+  fi
+
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$ZIP_FILE" -d "$DIST_DIR"
+  else
+    echo "Error: unzip is required for the first Gradle bootstrap." >&2
+    exit 1
+  fi
+
+  rm -f "$ZIP_FILE"
+fi
+
+exec "$GRADLE_HOME/bin/gradle" -p "$APP_HOME" "$@"

@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:localon;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+localon:
+  dataset:
+    path:
+  cors:
+    allowed-origins: http://localhost:5173

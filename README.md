@@ -1,79 +1,91 @@
-# LOCAL:ON React V1
+# LOCAL:ON
 
-관광 데이터 기반 로컬 여행 코스 추천 서비스의 1차 프론트엔드 구현입니다.
+관광 집중 지역과 로컬 생활권을 연결하는 여행 코스 추천 데모입니다.
 
-## 실행
+## 구조
+
+```text
+visitkorea-main/
+├── frontend/        React + Vite
+├── backend/         Spring Boot + PostgreSQL
+└── docker-compose.yml
+```
+
+프론트는 백엔드 API를 우선 사용하고, 백엔드가 꺼져 있으면 주요 화면에 데모 데이터와 안내 배너를 표시합니다. 백엔드는 데이터팀 파일이 없는 동안 내장 seed를 사용합니다.
+
+회원가입과 로그인 후에는 장소 즐겨찾기 및 추천 코스 저장이 가능하며 `/mypage`에서 저장 목록을 확인하고 삭제할 수 있습니다.
+
+## 가장 빠른 실행
+
+Docker가 설치되어 있다면 저장소 루트에서 실행합니다.
 
 ```bash
-npm install
+docker compose up --build
+```
+
+- 프론트: http://localhost:4173
+- 백엔드: http://localhost:8080
+- 상태 확인: http://localhost:8080/actuator/health
+- PostgreSQL: localhost:5432 (`localon` / `localon`, 충돌 시 `POSTGRES_PORT=5433` 지정)
+
+## 개발 모드
+
+PostgreSQL만 실행:
+
+```bash
+docker compose up -d postgres
+```
+
+백엔드:
+
+```bash
+cd backend
+./gradlew bootRun
+```
+
+프론트(다른 터미널):
+
+```bash
+cd frontend
+npm ci
 npm run dev
 ```
 
-## 빌드
+환경변수 예시는 `frontend/.env.example`, `backend/.env.example`에 있습니다.
+
+## 데이터팀 연동
+
+`backend/data/dataset.example.json`이 현재 합의용 JSON 스키마입니다. 데이터팀 산출물을 같은 형태로 만든 뒤 다음처럼 경로를 지정하면 시작 시 지역과 장소가 ID 기준으로 upsert됩니다.
 
 ```bash
-npm run build
+export DATASET_JSON_PATH=file:./data/dataset.json
+./gradlew bootRun
 ```
 
-## 환경변수
+Docker에서는 `backend/data`가 `/app/data`로 연결되므로 다음처럼 실행합니다.
 
-`.env.example`을 복사해 `.env` 생성:
-
-```env
-VITE_API_BASE_URL=http://localhost:8080/api
-```
-
-Spring Boot 운영 서버 주소가 생기면 해당 URL만 변경합니다.
-
-## 현재 화면
-
-- `/` : 전국 지도 + 로컬 발견 지역
-- `/region/gyeongju` : 지역 관광 집중도 분석
-- `/course/setup/gyeongju` : 추천 조건 설정
-- `/course/result` : 추천 코스 결과
-- `/places/seongdong-market` : 장소 상세
-
-## Spring Boot 연동 포인트
-
-`src/api/tourismApi.js`의 API 함수들을 사용합니다.
-
-예상 엔드포인트:
-
-- `GET /api/regions`
-- `GET /api/regions/{regionId}`
-- `GET /api/regions/{regionId}/places`
-- `POST /api/recommendations`
-- `GET /api/places/{placeId}`
-
-현재는 화면 개발을 위해 `src/data/mockData.js`를 사용합니다.
-API가 준비되면 React Query 또는 useEffect 기반으로 mock을 교체하면 됩니다.
-
-## Firebase Hosting
-
-1. Firebase CLI 설치
 ```bash
-npm install -g firebase-tools
+DATASET_JSON_PATH=file:/app/data/dataset.json docker compose up --build
 ```
 
-2. 로그인
-```bash
-firebase login
+실데이터로 적재된 장소는 API의 `sampleData: false`로 구분됩니다. 파일 경로가 비어 있으면 내장 CSV와 최소 POI seed를 사용합니다.
+
+## API
+
+주요 공개 API:
+
+```text
+GET  /api/regions
+GET  /api/regions/{regionId}
+GET  /api/regions/{regionId}/places
+GET  /api/places/{placeId}
+POST /api/recommendations
+GET  /api/search?q={query}
+POST /api/auth/signup
+POST /api/auth/login
+GET  /api/auth/me
+GET  /api/favorites
+GET  /api/courses
 ```
 
-3. 프로젝트 연결
-```bash
-firebase init hosting
-```
-
-설정:
-- public directory: `dist`
-- single-page app: `Yes`
-- overwrite index.html: `No`
-
-4. 빌드 및 배포
-```bash
-npm run build
-firebase deploy
-```
-
-`firebase.json`에는 React Router를 위한 SPA rewrite가 이미 포함되어 있습니다.
+인증, 즐겨찾기, 저장 코스 API의 상세 내용은 `backend/README.md`를 참고하세요.
