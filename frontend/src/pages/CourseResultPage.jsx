@@ -5,9 +5,10 @@ import { createRecommendation } from "../api/tourismApi";
 import { useApiResource } from "../hooks/useApiResource";
 import { useAuth } from "../auth/AuthContext";
 import { saveCourse } from "../api/memberApi";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { durationLabel, loadLatestCourseConfig, saveLatestCourseConfig } from "../utils/courseConfig";
 import { estimateDrivingLeg, formatMinutes } from "../utils/travelEstimate";
+import CourseKakaoMap from "../components/map/CourseKakaoMap";
 
 export default function CourseResultPage() {
   const navigate = useNavigate();
@@ -38,6 +39,7 @@ export default function CourseResultPage() {
   );
   const result = resource.data;
   const regionName = result.regionName || config.regionName || "선택 지역";
+  const selectStop = useCallback((stop) => navigate(`/places/${stop.id}`), [navigate]);
 
   useEffect(() => {
     if (!config.regionId || !navigator.geolocation) {
@@ -121,24 +123,17 @@ export default function CourseResultPage() {
 
       <div className="course-grid">
         <section className="panel route-map-panel">
-          <div className="route-map">
-            <div className="route-path" />
-            {result.stops.map((stop, index) => (
-              <button
-                key={stop.id}
-                type="button"
-                className={`route-pin pin-${index + 1}`}
-                onClick={() => navigate(`/places/${stop.id}`)}
-              >
-                {stop.order}
-              </button>
-            ))}
-          </div>
+          <CourseKakaoMap
+            stops={result.stops}
+            userLocation={userLocation}
+            onSelectStop={selectStop}
+          />
           <div className="map-note">
             {locationStatus === "ready"
               ? "현재 위치부터 첫 장소까지 포함해 계산했습니다."
               : "현재 위치 권한이 없어 첫 장소 이후 구간만 계산합니다."}
-            {" "}직선거리에 도로 보정계수와 평균 주행속도를 적용한 예상치입니다.
+            {" "}지도 연결선은 방문 순서를 나타내는 직선이며 실제 도로 경로가 아닙니다.
+            {" "}운전시간은 직선거리에 도로 보정계수와 평균 주행속도를 적용한 예상치입니다.
           </div>
         </section>
 
