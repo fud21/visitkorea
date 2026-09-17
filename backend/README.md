@@ -43,7 +43,7 @@ docker compose up -d postgres
 ./gradlew bootRun
 ```
 
-기본 접속값은 `jdbc:postgresql://localhost:5432/localon`, 사용자/비밀번호는 모두 `localon`입니다. 다른 값은 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 덮어쓸 수 있습니다.
+Compose가 호스트에 공개하는 기본 포트는 `25433`입니다. 로컬에서 백엔드를 직접 실행할 때는 `DB_URL=jdbc:postgresql://localhost:25433/localon`을 지정합니다. 사용자/비밀번호는 모두 `localon`이며 다른 값은 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 덮어쓸 수 있습니다.
 
 첫 `./gradlew` 실행 시 Gradle 8.10.2를 자동으로 내려받아 `~/.gradle`에 캐시합니다.
 
@@ -88,6 +88,7 @@ GET  /actuator/health
 
 ```text
 GET    /api/auth/me
+PUT    /api/auth/me
 POST   /api/auth/logout
 GET    /api/favorites
 POST   /api/favorites/{placeId}
@@ -108,7 +109,7 @@ Authorization: Bearer {accessToken}
 
 ## 데이터 주의사항
 
-`provinces.csv`, `municipalities.csv`는 초기 실행용 seed입니다. 데이터팀 파일 형식은 `data/dataset.example.json`을 기준으로 하며 `DATASET_JSON_PATH=file:./data/dataset.json`을 지정하면 애플리케이션 시작 시 ID 기준으로 갱신됩니다.
+`provinces.csv`, `municipalities.csv`는 지역 기준 데이터입니다. 전체 Docker 실행에서는 루트의 `scripts/build_all.py`가 `data/processed` CSV를 분야별 master JSON으로 만든 뒤 `dataset.json`으로 통합합니다. 백엔드는 이 통합 파일만 읽어 ID 기준으로 갱신합니다.
 
 POI(장소)는 현재 프론트가 샘플 단계이므로 경주/부여/영주/군산에 한해 초기 샘플 장소를 넣었습니다. 샘플 여부는 응답의 `sampleData`로 확인할 수 있습니다. 실제 POI가 없는 지역에서 추천을 요청하면 가짜 장소를 실제 장소처럼 반환하지 않고 `dataStatus: PLACEHOLDER`와 안내 문구를 함께 반환합니다.
 
@@ -117,7 +118,7 @@ POI(장소)는 현재 프론트가 샘플 단계이므로 경주/부여/영주/�
 프론트 `frontend/.env`:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080/api
+VITE_API_BASE_URL=/api
 ```
 
-지역 상세, 추천 결과, 장소 상세는 API를 먼저 호출하며 연결 실패 시 안내 배너와 데모 데이터를 표시합니다. 호출 코드는 `frontend/src/api/tourismApi.js`에 모여 있습니다.
+Docker에서는 Nginx가 `/api`를 `backend:8080`으로 프록시합니다. Vite 개발 서버도 같은 경로를 `localhost:8080`으로 프록시합니다. 호출 코드는 `frontend/src/api/tourismApi.js`에 모여 있습니다.

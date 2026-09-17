@@ -22,12 +22,12 @@ const menu = [
     label: "지도 탐색",
   },
   {
-    to: "/region/gyeongju",
+    to: "/map",
     icon: MapPinned,
     label: "지역 랭킹",
   },
   {
-    to: "/course/setup/gyeongju",
+    to: "/course/setup",
     icon: Sparkles,
     label: "테마 코스",
   },

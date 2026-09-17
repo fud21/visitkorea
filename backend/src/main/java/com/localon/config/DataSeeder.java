@@ -1,8 +1,12 @@
 package com.localon.config;
-import com.localon.place.*; import com.localon.region.*; import lombok.RequiredArgsConstructor; import org.springframework.boot.CommandLineRunner; import org.springframework.core.io.ClassPathResource; import org.springframework.stereotype.Component; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
+import com.localon.place.*; import com.localon.region.*; import lombok.RequiredArgsConstructor; import org.springframework.beans.factory.annotation.Value; import org.springframework.boot.CommandLineRunner; import org.springframework.core.io.ClassPathResource; import org.springframework.stereotype.Component; import java.io.*; import java.nio.charset.StandardCharsets; import java.util.*;
 @Component @RequiredArgsConstructor public class DataSeeder implements CommandLineRunner {
  private final RegionRepository regions; private final PlaceRepository places;
- @Override public void run(String... args) throws Exception { if(regions.count()==0){loadRegions();} if(places.count()==0){seedPlaces();} }
+ @Value("${localon.dataset.path:}") private String datasetPath;
+ @Override public void run(String... args) throws Exception {
+  if(datasetPath!=null&&!datasetPath.isBlank()) return;
+  if(regions.count()==0){loadRegions();} if(places.count()==0){seedPlaces();}
+ }
  private void loadRegions() throws Exception {
   try(var br=reader("provinces.csv")){br.readLine();String line;while((line=br.readLine())!=null){String[] a=line.split(",");regions.save(new Region(Region.RegionType.PROVINCE,a[0],null,Long.parseLong(a[1]),Double.parseDouble(a[2])));}}
   try(var br=reader("municipalities.csv")){br.readLine();String line;while((line=br.readLine())!=null){String[] a=line.split(",");regions.save(new Region(Region.RegionType.MUNICIPALITY,a[1],a[0],Long.parseLong(a[2]),Double.parseDouble(a[3])));}}
@@ -22,7 +26,7 @@ import com.localon.place.*; import com.localon.region.*; import lombok.RequiredA
   add("gunsan-market","군산 전통시장 후보","전통시장","군산시","전북 군산시 도심권",85,55,45,10000,35.9677,126.7366,Set.of("전통시장","현지인 맛집"),"근대문화 관광과 생활 상권을 연결하는 초기 샘플입니다.");
   add("gunsan-modern","군산 근대역사거리","문화·역사","군산시","전북 군산시 해망로 일대",48,92,70,3000,35.9902,126.7119,Set.of("문화·역사","카페"),"군산의 대표 관광 동선을 구성하는 앵커 장소입니다.");
  }
- private void add(String id,String name,String category,String regionName,String address,int local,int popularity,int stay,int cost,double lat,double lon,Set<String> themes,String reason){
+ private void add(String id,String name,String category,String regionName,String address,double local,double popularity,int stay,int cost,double lat,double lon,Set<String> themes,String reason){
   Region r=regions.findByTypeAndName(Region.RegionType.MUNICIPALITY,regionName).orElse(null); if(r==null)return; Place p=new Place();p.setId(id);p.setName(name);p.setCategory(category);p.setRegion(r);p.setAddress(address);p.setDescription(reason);p.setHours("장소별 운영시간 확인 필요");p.setClosedInfo("장소별 상이");p.setParking("현장 정보 확인 필요");p.setLocalScore(local);p.setPopularityScore(popularity);p.setStayMinutes(stay);p.setEstimatedCost(cost);p.setLatitude(lat);p.setLongitude(lon);p.setThemes(new LinkedHashSet<>(themes));p.setReasons(new ArrayList<>(List.of(reason,"선택한 여행 테마와 이동 동선을 함께 고려합니다.")));p.setSampleData(true);places.save(p);
  }
 }

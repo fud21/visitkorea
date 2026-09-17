@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: localon
       POSTGRES_PASSWORD: localon
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-25433}:5432"
     volumes:
       - localon-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -15,31 +15,60 @@ services:
       timeout: 3s
       retries: 10
 
+  data-builder:
+    image: python:3.12-alpine
+    command:
+      - python
+      - /scripts/build_dataset.py
+      - --data-root
+      - /source/processed
+      - --region-resources
+      - /regions
+      - --masters-root
+      - /source/processed
+      - --output
+      - /output/dataset.json
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./data:/source
+      - ./backend/src/main/resources:/regions:ro
+      - localon-dataset:/output
+
   backend:
     build: ./backend
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/localon
       DB_USERNAME: localon
       DB_PASSWORD: localon
-      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173
-      DATASET_JSON_PATH: ${DATASET_JSON_PATH:-}
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:4173,http://127.0.0.1:4173
+      DATASET_JSON_PATH: file:/app/data/dataset.json
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      data-builder:
+        condition: service_completed_successfully
     volumes:
-      - ./backend/data:/app/data:ro
+      - localon-dataset:/app/data:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 180s
 
   frontend:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://localhost:8080/api
+        VITE_API_BASE_URL: /api
     ports:
       - "4173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   localon-postgres:
+  localon-dataset:

@@ -98,7 +98,7 @@ function getShortRegionName(name) {
   return regionDisplayNames[name] ?? name;
 }
 
-export default function KakaoMap() {
+export default function KakaoMap({ regions = provinceVisitors }) {
   const mapRef = useRef(null);
   const navigate = useNavigate();
 
@@ -147,14 +147,15 @@ export default function KakaoMap() {
           map.setCenter(center);
         }, 100);
 
-        provinceVisitors.forEach((region) => {
+        regions.forEach((region) => {
+        const provinceName = region.province || region.name;
         const coordinate =
-            provinceCoordinates[region.province];
+            provinceCoordinates[provinceName];
 
         if (!coordinate) {
             console.warn(
             "[KakaoMap] 좌표 없음:",
-            region.province
+            provinceName
             );
 
             return;
@@ -185,14 +186,14 @@ export default function KakaoMap() {
         </strong>
 
         <span>
-            ${getShortRegionName(region.province)}
+            ${getShortRegionName(provinceName)}
         </span>
         `;
 
         content.addEventListener(
             "click",
             () => {
-            navigate("/map");
+            navigate(`/region/${region.id || provinceName}`);
             }
         );
 
@@ -246,7 +247,7 @@ export default function KakaoMap() {
 
       overlays = [];
     };
-  }, [navigate]);
+  }, [navigate, regions]);
 
   return (
     <div

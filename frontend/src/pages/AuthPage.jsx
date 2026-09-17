@@ -23,7 +23,13 @@ export default function AuthPage() {
       await authenticate(mode, form);
       navigate(destination.pathname, { replace: true, state: destination.state });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "요청을 처리하지 못했습니다. 입력 내용을 확인해주세요.");
+      const serverMessage = typeof requestError.response?.data === "object"
+        ? requestError.response?.data?.message
+        : null;
+      const unavailable = !requestError.response || requestError.response.status >= 500;
+      setError(serverMessage || (unavailable
+        ? "서버가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요."
+        : "요청을 처리하지 못했습니다. 입력 내용을 확인해주세요."));
     } finally {
       setSubmitting(false);
     }

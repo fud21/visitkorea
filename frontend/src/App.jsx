@@ -53,6 +53,11 @@ export default function App() {
         />
 
         <Route
+          path="/course/setup"
+          element={<CourseSetupPage />}
+        />
+
+        <Route
           path="/course/result"
           element={<CourseResultPage />}
         />

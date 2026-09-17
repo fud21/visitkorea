@@ -7,48 +7,19 @@ import {
 
 import { useNavigate } from "react-router-dom";
 import heroIllustration from "../assets/home.png";
-
-const discoveryRegions = [
-  {
-    id: "gyeongju",
-    rank: "01",
-    name: "경주",
-    province: "경상북도",
-    visitorRatio: 14.8,
-    type: "문화·역사",
-    imageClass: "region-image-1",
-  },
-  {
-    id: "buyeo",
-    rank: "02",
-    name: "부여",
-    province: "충청남도",
-    visitorRatio: 4.3,
-    type: "백제 문화",
-    imageClass: "region-image-2",
-  },
-  {
-    id: "yeongju",
-    rank: "03",
-    name: "영주",
-    province: "경상북도",
-    visitorRatio: 3.8,
-    type: "자연·전통",
-    imageClass: "region-image-3",
-  },
-  {
-    id: "gunsan",
-    rank: "04",
-    name: "군산",
-    province: "전북특별자치도",
-    visitorRatio: 5.1,
-    type: "근대 문화",
-    imageClass: "region-image-4",
-  },
-];
+import { fetchRegions } from "../api/tourismApi";
+import { useApiResource } from "../hooks/useApiResource";
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const regionResource = useApiResource(fetchRegions, [], []);
+  const discoveryRegions = regionResource.data.slice(0, 4).map((region, index) => ({
+    ...region,
+    rank: String(index + 1).padStart(2, "0"),
+    province: "전국 방문 데이터",
+    type: `방문 비중 ${Number(region.visitorRatio).toFixed(1)}%`,
+    imageClass: `region-image-${index + 1}`,
+  }));
 
   return (
     <div className="home-landing">
@@ -85,9 +56,7 @@ export default function HomePage() {
             <button
               type="button"
               className="secondary-button home-secondary-action"
-              onClick={() =>
-                navigate("/course/setup/gyeongju")
-              }
+              onClick={() => navigate("/course/setup")}
             >
               <Route size={18} />
               코스 추천 받기
@@ -145,6 +114,7 @@ export default function HomePage() {
         </div>
 
         <div className="home-region-grid">
+          {regionResource.loading && <div className="empty-card">지역 데이터를 불러오는 중입니다.</div>}
           {discoveryRegions.map((region) => (
             <button
               type="button"
@@ -183,6 +153,9 @@ export default function HomePage() {
               </div>
             </button>
           ))}
+          {!regionResource.loading && discoveryRegions.length === 0 && (
+            <div className="empty-card">지역 데이터를 불러오지 못했습니다. 지도 탐색에서 다시 시도해주세요.</div>
+          )}
         </div>
       </section>
 

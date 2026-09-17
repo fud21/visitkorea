@@ -15,6 +15,13 @@ export async function fetchRegion(regionId) {
   return data;
 }
 
+export async function fetchMunicipalities(provinceName) {
+  const { data } = await apiClient.get(
+    `/regions/provinces/${encodeURIComponent(provinceName)}/municipalities`
+  );
+  return data;
+}
+
 export async function fetchPlaces(regionId, params = {}) {
   const { data } = await apiClient.get(`/regions/${regionId}/places`, { params });
   return data;

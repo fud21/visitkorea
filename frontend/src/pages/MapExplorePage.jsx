@@ -4,14 +4,28 @@ import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/common/PageHeader";
 import KakaoMap from "../components/map/KakaoMap";
 import SchematicMap from "../components/map/SchematicMap";
-import { regions } from "../data/mockData";
+import { fetchRegions } from "../api/tourismApi";
+import { useApiResource } from "../hooks/useApiResource";
+import { provinceVisitors } from "../data/visitorData";
 
-export default function HomePage() {
+const fallbackRegions = provinceVisitors.map((region, index) => ({
+  id: region.province,
+  name: region.province,
+  visitorRatio: region.visitorRatio,
+  rank: index + 1,
+}));
+
+export default function MapExplorePage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const hasKakaoKey = Boolean(import.meta.env.VITE_KAKAO_MAP_JAVASCRIPT_KEY);
-  const visibleRegions = regions.filter((region) =>
-    `${region.name} ${region.province}`.toLowerCase().includes(query.trim().toLowerCase())
+  const resource = useApiResource(fetchRegions, [], fallbackRegions);
+  const apiRegions = [...resource.data]
+    .sort((left, right) => right.visitorRatio - left.visitorRatio)
+    .map((region, index) => ({ ...region, rank: index + 1 }));
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleRegions = apiRegions.filter((region) =>
+    `${region.name} ${region.provinceName || ""}`.toLowerCase().includes(normalizedQuery)
   );
 
   function search(event) {
@@ -21,10 +35,12 @@ export default function HomePage() {
 
   return (
     <div className="page">
+      {resource.loading && <div className="status-banner">지역 데이터를 불러오는 중입니다.</div>}
+      {resource.usingFallback && <div className="status-banner warning">백엔드 연결 전 데모 지역 데이터를 표시합니다.</div>}
       <PageHeader
         eyebrow="LOCAL DISCOVERY"
         title="유명한 곳에서 한 걸음 더, 지역으로."
-        description="관광 데이터 기반으로 관광 집중지역과 로컬 발견지역을 함께 보여주고, 지역 생활권까지 이어지는 여행 코스를 추천합니다."
+        description="관광 데이터 기반으로 지역별 방문 비중을 비교하고 지역 생활권까지 이어지는 여행을 추천합니다."
       />
 
       <form className="hero-search" onSubmit={search}>
@@ -33,7 +49,7 @@ export default function HomePage() {
           id="destination-search"
           name="destinationSearch"
           type="text"
-          placeholder="어디로 떠나볼까요? 지역 또는 테마를 검색하세요."
+          placeholder="시·도 이름을 검색하세요."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -47,17 +63,16 @@ export default function HomePage() {
               <span className="section-kicker">전국 지도</span>
               <h2>관광객이 어디에 몰려있을까?</h2>
             </div>
-            <button className="ghost-button" type="button">필터</button>
           </div>
-          {hasKakaoKey ? <KakaoMap /> : <SchematicMap />}
+          {hasKakaoKey ? <KakaoMap regions={apiRegions} /> : <SchematicMap regions={apiRegions} />}
           {!hasKakaoKey && <p className="panel-note">Kakao JavaScript 키가 없어 데모 지도를 표시합니다.</p>}
         </section>
 
         <aside className="panel discovery-panel">
           <div className="panel-head">
             <div>
-              <span className="section-kicker">이번 주</span>
-              <h2>로컬 발견 지역</h2>
+              <span className="section-kicker">방문 비중</span>
+              <h2>지역 데이터</h2>
             </div>
           </div>
 
@@ -72,11 +87,11 @@ export default function HomePage() {
                 <span className="rank">{String(region.rank).padStart(2, "0")}</span>
                 <span className="ranking-main">
                   <strong>{region.name}</strong>
-                  <small>{region.province}</small>
+                  <small>{region.type === "PROVINCE" ? "광역지자체" : region.provinceName}</small>
                 </span>
                 <span className="score-box">
-                  <strong>{region.localPotential}</strong>
-                  <small>Local</small>
+                  <strong>{Number(region.visitorRatio).toFixed(1)}%</strong>
+                  <small>방문</small>
                 </span>
                 <ArrowRight size={18} />
               </button>
@@ -96,13 +111,13 @@ export default function HomePage() {
         <div className="theme-grid">
           {[
             ["전통시장", "생활 상권과 먹거리"],
-            ["빵지순례", "로컬 베이커리"],
-            ["떡지순례", "지역 전통 간식"],
-            ["현지인 맛집", "외지인보다 현지인 선호"],
-          ].map(([title, desc]) => (
-            <button key={title} className="theme-card" type="button" onClick={() => navigate("/course/setup/gyeongju")}>
+            ["문화·역사", "지역의 역사와 문화"],
+            ["카페/찻집", "지역에서 쉬어가는 시간"],
+            ["맛집", "지역 방문 순위 기반"],
+          ].map(([title, description]) => (
+            <button key={title} className="theme-card" type="button" onClick={() => navigate(`/course/setup?theme=${encodeURIComponent(title)}`)}>
               <strong>{title}</strong>
-              <span>{desc}</span>
+              <span>{description}</span>
               <ArrowRight size={18} />
             </button>
           ))}
