@@ -144,8 +144,8 @@ export default function CourseSetupPage() {
           <h2>여행 시간</h2>
           <div className="duration-grid">
             {[
-              ["daytrip", "당일치기", "핵심 장소 중심"],
-              ["day", "하루", "여유롭게 둘러보기"],
+              ["daytrip", "당일치기", "하루 동안 둘러보는 로컬 코스"],
+              ["1n2d", "1박 2일", "여유롭게 둘러보는 2일 코스"],
             ].map(([value, title, desc]) => (
               <button
                 key={value}

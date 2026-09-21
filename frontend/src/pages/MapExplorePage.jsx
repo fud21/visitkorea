@@ -27,6 +27,7 @@ export default function MapExplorePage() {
   const visibleRegions = apiRegions.filter((region) =>
     `${region.name} ${region.provinceName || ""}`.toLowerCase().includes(normalizedQuery)
   );
+  const displayedRegions = visibleRegions.slice(0, 8);
 
   function search(event) {
     event.preventDefault();
@@ -77,7 +78,7 @@ export default function MapExplorePage() {
           </div>
 
           <div className="ranking-list">
-            {visibleRegions.map((region) => (
+            {displayedRegions.map((region) => (
               <button
                 key={region.id}
                 className="ranking-row"
