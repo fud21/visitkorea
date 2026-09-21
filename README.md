@@ -1,21 +1,33 @@
 # LOCAL:ON
 
-공공 관광 데이터를 바탕으로 관광 집중 지역과 로컬 생활권을 연결하는 여행 코스 추천 애플리케이션입니다.
+공공 관광 데이터를 기반으로 지역의 관광지, 음식점, 카페, 전통시장 등을 분석하여 로컬 여행 코스를 추천하는 관광 서비스입니다.
+
+사용자가 시/도와 관심 테마를 선택하면 Python 추천 모델이 적합한 시군구와 방문 장소를 선정하고, Spring Boot가 추천 결과와 Kakao Mobility 자동차 경로 정보를 결합하여 React 프론트엔드에 제공합니다.
+
+---
 
 ## 프로젝트 구조
 
 ```text
 visitkorea/
-├── frontend/                 React + Vite + Nginx
-├── backend/                  Spring Boot + PostgreSQL
-├── data/processed/           데이터팀 CSV 및 master JSON
-│   ├── attraction/
-│   ├── market/
-│   └── restaurant/
-├── scripts/build_all.py      로컬 실행용 진입점
-├── scripts/build_dataset.py  master JSON 생성 및 dataset 통합
-└── docker-compose.yml
-```
+├── frontend/                       React + Vite + Nginx
+├── backend/                        Spring Boot + PostgreSQL
+├── route-recommendation/           Python 추천 모델 + FastAPI
+│   ├── api_server.py
+│   ├── local_on_route_recommender.py
+│   ├── requirements.txt
+│   └── data/
+│       └── 관광 데이터 CSV
+│
+├── data/
+│   └── processed/                  Spring DB 적재용 가공 데이터
+│
+├── scripts/
+│   ├── build_all.py
+│   └── build_dataset.py
+│
+├── docker-compose.yml
+└── README.md
 
 ## 전체 실행
 
