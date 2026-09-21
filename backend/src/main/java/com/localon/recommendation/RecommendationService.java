@@ -1,216 +1,808 @@
 package com.localon.recommendation;
 
-import com.localon.place.Place;
-import com.localon.place.PlaceService;
 import com.localon.region.Region;
 import com.localon.region.RegionService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class RecommendationService {
-    private static final double MISSING_SCORE_BASELINE = 50.0;
 
     private final RegionService regions;
-    private final PlaceService places;
+    private final KakaoRouteService kakaoRouteService;
 
-    public RecommendationResponse recommend(RecommendationRequest request) {
-        String key = request.regionId() != null && !request.regionId().isBlank()
-                ? request.regionId()
-                : request.regionName();
+    private final RestClient restClient =
+            RestClient.builder()
+                    .baseUrl("http://host.docker.internal:8000")
+                    .build();
+
+
+    public RecommendationResponse recommend(
+            RecommendationRequest request
+    ) {
+
+        // ========================================================
+        // 1. 지역 찾기
+        // ========================================================
+
+        String key =
+                request.regionId() != null
+                        && !request.regionId().isBlank()
+                        ? request.regionId()
+                        : request.regionName();
+
+
         if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("regionId 또는 regionName이 필요합니다.");
+
+            throw new IllegalArgumentException(
+                    "regionId 또는 regionName이 필요합니다."
+            );
         }
 
-        Region region = regions.resolve(key);
-        int requestedLocalRatio = Math.max(0, Math.min(100, request.localRatio()));
-        List<String> themes = request.selectedThemes() == null ? List.of() : request.selectedThemes();
-        int maxStops = switch (Optional.ofNullable(request.duration()).orElse("daytrip")) {
-            case "2h" -> 3;
-            case "day" -> 6;
-            case "daytrip", "half" -> 4;
-            default -> 4;
-        };
 
-        List<Place> candidates = new ArrayList<>(places.entitiesFor(region, themes));
-        boolean placeholder = candidates.isEmpty();
-        if (placeholder) {
-            candidates = placeholderPlaces(region, themes);
+        Region region =
+                regions.resolve(key);
+
+
+        String sido;
+        String sigungu;
+
+
+        if (
+                region.getType()
+                        == Region.RegionType.PROVINCE
+        ) {
+
+            sido =
+                    region.getName();
+
+            sigungu =
+                    null;
+
+        } else {
+
+            sido =
+                    region.getProvinceName();
+
+            sigungu =
+                    region.getName();
         }
 
-        candidates.sort(Comparator.comparingDouble(
-                (Place place) -> score(place, themes, requestedLocalRatio)
-        ).reversed());
-        List<Place> chosen = choosePlaces(candidates, themes, maxStops);
 
-        int minutes = chosen.stream().mapToInt(Place::getStayMinutes).sum()
-                + Math.max(0, chosen.size() - 1) * 20;
-        int cost = chosen.stream().mapToInt(Place::getEstimatedCost).sum();
-        double distance = Math.max(1.5, chosen.size() * 3.8);
-        int actualLocalRatio = (int) Math.round(chosen.stream()
-                .map(Place::getLocalScore)
-                .filter(Objects::nonNull)
-                .mapToDouble(Double::doubleValue)
-                .average()
-                .orElse(requestedLocalRatio));
+        if (
+                sido == null
+                        || sido.isBlank()
+        ) {
 
-        List<Stop> stops = new ArrayList<>();
-        for (int index = 0; index < chosen.size(); index++) {
-            Place place = chosen.get(index);
-            stops.add(new Stop(
-                    place.getId(),
-                    index + 1,
-                    place.getName(),
-                    place.getCategory(),
-                    place.getStayMinutes() + "분",
-                    place.getLocalScore(),
-                    place.getAddress(),
-                    place.getLatitude(),
-                    place.getLongitude(),
-                    reason(place, themes),
-                    place.isSampleData() || placeholder
-            ));
+            throw new IllegalArgumentException(
+                    "추천 모델 호출에 필요한 시도 정보가 없습니다."
+            );
         }
 
-        String notice = placeholder
-                ? "실제 장소가 없는 지역이라 테마 기반 임시 슬롯을 표시합니다."
-                : "공공 관광 데이터와 지역 조건을 반영한 추천 결과입니다.";
+
+        // ========================================================
+        // 2. 카테고리
+        // ========================================================
+
+        List<String> categories;
+
+
+        if (
+                request.selectedThemes() == null
+                        || request.selectedThemes().isEmpty()
+        ) {
+
+            categories =
+                    List.of(
+                            "맛집",
+                            "관광지",
+                            "카페/베이커리",
+                            "전통시장"
+                    );
+
+        } else {
+
+            categories =
+                    normalizeCategories(
+                            request.selectedThemes()
+                    );
+        }
+
+
+        // ========================================================
+        // 3. 여행 유형
+        // ========================================================
+
+        String trip =
+                normalizeTrip(
+                        request.duration()
+                );
+
+
+        // ========================================================
+        // 4. Python 추천 API 요청
+        // ========================================================
+
+        PythonRecommendRequest pythonRequest =
+                new PythonRecommendRequest(
+                        sido,
+                        sigungu,
+                        trip,
+                        categories,
+                        "10:00"
+                );
+
+
+        PythonRecommendResponse pythonResponse;
+
+
+        try {
+
+            pythonResponse =
+                    restClient
+                            .post()
+                            .uri("/recommend")
+                            .body(pythonRequest)
+                            .retrieve()
+                            .body(
+                                    PythonRecommendResponse.class
+                            );
+
+        } catch (Exception e) {
+
+            throw new IllegalStateException(
+                    "Python 추천 서버 호출에 실패했습니다: "
+                            + e.getMessage(),
+                    e
+            );
+        }
+
+
+        if (pythonResponse == null) {
+
+            throw new IllegalStateException(
+                    "Python 추천 서버의 응답이 없습니다."
+            );
+        }
+
+
+        if (
+                pythonResponse.status() == null
+                        || !pythonResponse.status()
+                        .equalsIgnoreCase("success")
+        ) {
+
+            throw new IllegalStateException(
+                    "Python 추천 모델이 정상 결과를 반환하지 않았습니다."
+            );
+        }
+
+
+        // ========================================================
+        // 5. Python이 선택한 실제 시군구
+        // ========================================================
+
+        String selectedSigungu =
+                pythonResponse.sigungu();
+
+
+        if (
+                selectedSigungu == null
+                        || selectedSigungu.isBlank()
+        ) {
+
+            selectedSigungu =
+                    sigungu;
+        }
+
+
+        // ========================================================
+        // 6. Python stops → 프론트 Stop
+        // ========================================================
+
+        List<Stop> stops =
+                new ArrayList<>();
+
+
+        if (pythonResponse.stops() != null) {
+
+            for (
+                    PythonStop pythonStop
+                    : pythonResponse.stops()
+            ) {
+
+                int order =
+                        pythonStop.order() == null
+                                ? stops.size() + 1
+                                : pythonStop.order();
+
+
+                Double score =
+                        pythonStop.routeScore() != null
+                                ? pythonStop.routeScore()
+                                : pythonStop.placeScore();
+
+
+                String stay =
+                        makeStayText(
+                                pythonStop.arrivalTime(),
+                                pythonStop.departureTime()
+                        );
+
+
+                String reason =
+                        makeReason(
+                                pythonStop
+                        );
+
+
+                stops.add(
+                        new Stop(
+                                "python-"
+                                        + UUID.randomUUID(),
+
+                                order,
+
+                                pythonStop.name(),
+
+                                pythonStop.category(),
+
+                                stay,
+
+                                score,
+
+                                "",
+
+                                pythonStop.latitude(),
+
+                                pythonStop.longitude(),
+
+                                reason,
+
+                                false
+                        )
+                );
+            }
+        }
+
+
+        // ========================================================
+        // 7. 카카오 자동차 길찾기
+        // ========================================================
+
+        KakaoRouteService.RouteSummary kakaoRoute =
+                kakaoRouteService.calculateRoute(
+                        stops
+                );
+
+
+        // ========================================================
+        // 8. Python 결과 fallback
+        // ========================================================
+
+        Map<String, Object> pythonSummary =
+                pythonResponse.summary();
+
+
+        String duration;
+        String distance;
+
+
+        /*
+         * 카카오 길찾기가 정상적으로 계산되면
+         * 실제 자동차 이동시간 / 도로거리를 사용한다.
+         *
+         * 실패하면 Python의 위경도 기반 추정값을 사용한다.
+         */
+
+        if (
+                kakaoRoute != null
+                        && kakaoRoute.distanceKm() > 0
+        ) {
+
+            duration =
+                    formatDuration(
+                            kakaoRoute.durationMinutes()
+                    );
+
+
+            distance =
+                    String.format(
+                            "%.1f km",
+                            kakaoRoute.distanceKm()
+                    );
+
+        } else {
+
+            duration =
+                    summaryValue(
+                            pythonSummary,
+                            "총이동시간분",
+                            "분"
+                    );
+
+
+            distance =
+                    summaryValue(
+                            pythonSummary,
+                            "총이동거리km",
+                            " km"
+                    );
+        }
+
+
+        // ========================================================
+        // 9. 프론트 summary
+        // ========================================================
+
+        Summary summary =
+                new Summary(
+                        duration,
+                        distance,
+                        request.localRatio(),
+                        "-"
+                );
+
+
+        // ========================================================
+        // 10. 화면 표시 지역명
+        // ========================================================
+
+        String responseRegionName;
+
+
+        if (
+                selectedSigungu != null
+                        && !selectedSigungu.isBlank()
+        ) {
+
+            responseRegionName =
+                    sido
+                            + " "
+                            + selectedSigungu;
+
+        } else {
+
+            responseRegionName =
+                    sido;
+        }
+
+
+        // ========================================================
+        // 11. React 반환
+        // ========================================================
+
         return new RecommendationResponse(
                 UUID.randomUUID().toString(),
-                region.getName(),
-                new Summary(
-                        formatMinutes(minutes),
-                        String.format(Locale.US, "%.1f km", distance),
-                        actualLocalRatio,
-                        "약 " + String.format("%,d", cost) + "원"
-                ),
+
+                responseRegionName,
+
+                summary,
+
                 stops,
-                placeholder ? "PLACEHOLDER" : "LIVE",
-                notice
+
+                "PYTHON_MODEL",
+
+                "LOCAL:ON Python 추천 + Kakao 자동차 길찾기 결과입니다."
         );
     }
 
-    private double score(Place place, List<String> themes, int localRatio) {
-        double localWeight = localRatio / 100.0;
-        double localScore = scoreOrFallback(place.getLocalScore(), place.getPopularityScore());
-        double popularityScore = scoreOrFallback(place.getPopularityScore(), place.getLocalScore());
-        double themeScore = themes.stream().anyMatch(theme -> matchesTheme(place, theme)) ? 100 : 45;
-        return localScore * localWeight + popularityScore * (1 - localWeight) + themeScore * .25;
-    }
 
-    private List<Place> choosePlaces(List<Place> ranked, List<String> themes, int maxStops) {
-        LinkedHashSet<Place> chosen = new LinkedHashSet<>();
+    // ============================================================
+    // 카테고리 정규화
+    // ============================================================
+
+    private List<String> normalizeCategories(
+            List<String> themes
+    ) {
+
+        List<String> result =
+                new ArrayList<>();
+
+
         for (String theme : themes) {
-            ranked.stream()
-                    .filter(place -> matchesTheme(place, theme))
-                    .filter(place -> !chosen.contains(place))
-                    .findFirst()
-                    .ifPresent(chosen::add);
-            if (chosen.size() >= maxStops) break;
+
+            if (
+                    theme == null
+                            || theme.isBlank()
+            ) {
+                continue;
+            }
+
+
+            String value =
+                    theme.trim();
+
+
+            if (
+                    value.contains("맛집")
+                            || value.contains("음식")
+            ) {
+
+                addIfMissing(
+                        result,
+                        "맛집"
+                );
+
+            } else if (
+                    value.contains("카페")
+                            || value.contains("베이커리")
+            ) {
+
+                addIfMissing(
+                        result,
+                        "카페/베이커리"
+                );
+
+            } else if (
+                    value.contains("시장")
+            ) {
+
+                addIfMissing(
+                        result,
+                        "전통시장"
+                );
+
+            } else if (
+                    value.contains("관광")
+                            || value.contains("자연")
+                            || value.contains("힐링")
+                            || value.contains("문화")
+                            || value.contains("체험")
+                            || value.contains("레저")
+            ) {
+
+                addIfMissing(
+                        result,
+                        "관광지"
+                );
+
+            } else {
+
+                addIfMissing(
+                        result,
+                        value
+                );
+            }
         }
-        for (Place place : ranked) {
-            if (chosen.size() >= maxStops) break;
-            chosen.add(place);
+
+
+        if (result.isEmpty()) {
+
+            return List.of(
+                    "맛집",
+                    "관광지",
+                    "카페/베이커리",
+                    "전통시장"
+            );
         }
-        return new ArrayList<>(chosen);
+
+
+        return result;
     }
 
-    private boolean matchesTheme(Place place, String theme) {
-        return place.getThemes().contains(theme) || place.getCategory().contains(theme);
+
+    private void addIfMissing(
+            List<String> list,
+            String value
+    ) {
+
+        if (!list.contains(value)) {
+            list.add(value);
+        }
     }
 
-    private double scoreOrFallback(Double value, Double alternative) {
-        if (value != null) return value;
-        if (alternative != null) return alternative;
-        return MISSING_SCORE_BASELINE;
+
+    // ============================================================
+    // 여행 유형
+    // ============================================================
+
+    private String normalizeTrip(
+            String duration
+    ) {
+
+        if (
+                duration == null
+                        || duration.isBlank()
+        ) {
+
+            return "day";
+        }
+
+
+        return switch (duration) {
+
+            case "day",
+                 "daytrip",
+                 "half",
+                 "2h" -> "day";
+
+            default -> "day";
+        };
     }
 
-    private String reason(Place place, List<String> themes) {
-        Optional<String> matchedTheme = themes.stream()
-                .filter(theme -> matchesTheme(place, theme))
-                .findFirst();
-        if (matchedTheme.isPresent()) {
-            return "선택한 '" + matchedTheme.get() + "' 테마와 잘 맞는 장소입니다.";
+
+    // ============================================================
+    // 장소 방문 시간
+    // ============================================================
+
+    private String makeStayText(
+            String arrival,
+            String departure
+    ) {
+
+        if (
+                arrival == null
+                        || departure == null
+        ) {
+
+            return "";
         }
-        if (!place.getReasons().isEmpty()) {
-            return place.getReasons().get(0);
-        }
-        return "지역 방문 분산과 이동 동선을 고려한 후보입니다.";
+
+
+        return arrival
+                + " ~ "
+                + departure;
     }
 
-    private List<Place> placeholderPlaces(Region region, List<String> themes) {
-        List<String> categories = new ArrayList<>(themes);
-        if (categories.isEmpty()) {
-            categories.addAll(List.of("전통시장", "맛집", "카페", "자연/힐링", "관광지"));
+
+    // ============================================================
+    // 추천 이유
+    // ============================================================
+
+    private String makeReason(
+            PythonStop stop
+    ) {
+
+        List<String> reasons =
+                new ArrayList<>();
+
+
+        if (
+                stop.subCategory() != null
+                        && !stop.subCategory().isBlank()
+        ) {
+
+            reasons.add(
+                    stop.subCategory()
+            );
         }
-        List<Place> output = new ArrayList<>();
-        for (int index = 0; index < Math.min(6, categories.size() + 2); index++) {
-            String category = categories.get(index % categories.size());
-            Place place = new Place();
-            place.setId("placeholder-" + region.getId() + "-" + index);
-            place.setName(region.getName() + " " + category + " 후보");
-            place.setCategory(category);
-            place.setAddress("실제 장소 데이터 연결 예정");
-            place.setDescription("실제 장소 데이터 연결 전 추천 슬롯입니다.");
-            place.setLocalScore((double) Math.max(55, 88 - index * 5));
-            place.setPopularityScore((double) (55 + index * 3));
-            place.setStayMinutes(35 + index * 5);
-            place.setEstimatedCost(category.contains("맛집") ? 12000 : category.contains("카페") ? 6000 : 3000);
-            place.setThemes(new LinkedHashSet<>(Set.of(category)));
-            place.setReasons(new ArrayList<>(List.of("사용자 선택 테마와 지역 조건을 반영한 임시 후보입니다.")));
-            place.setSampleData(true);
-            output.add(place);
+
+
+        if (
+                stop.placeScore() != null
+        ) {
+
+            reasons.add(
+                    "장소추천점수 "
+                            + String.format(
+                            "%.1f",
+                            stop.placeScore()
+                    )
+            );
         }
-        return output;
+
+
+        if (
+                stop.travelMinutes() != null
+        ) {
+
+            reasons.add(
+                    "예상 이동 "
+                            + String.format(
+                            "%.1f분",
+                            stop.travelMinutes()
+                    )
+            );
+        }
+
+
+        return String.join(
+                " · ",
+                reasons
+        );
     }
 
-    private String formatMinutes(int minutes) {
-        return (minutes / 60) + "시간 " + (minutes % 60) + "분";
+
+    // ============================================================
+    // 카카오 이동시간 표시
+    // ============================================================
+
+    private String formatDuration(
+            double minutes
+    ) {
+
+        long roundedMinutes =
+                Math.round(minutes);
+
+
+        long hours =
+                roundedMinutes / 60;
+
+
+        long remainingMinutes =
+                roundedMinutes % 60;
+
+
+        if (hours > 0) {
+
+            return hours
+                    + "시간 "
+                    + remainingMinutes
+                    + "분";
+        }
+
+
+        return remainingMinutes
+                + "분";
     }
+
+
+    // ============================================================
+    // Python summary
+    // ============================================================
+
+    private String summaryValue(
+            Map<String, Object> summary,
+            String key,
+            String suffix
+    ) {
+
+        if (summary == null) {
+
+            return "-";
+        }
+
+
+        Object value =
+                summary.get(key);
+
+
+        if (value == null) {
+
+            return "-";
+        }
+
+
+        return value
+                + suffix;
+    }
+
+
+    // ============================================================
+    // React → Spring
+    // ============================================================
 
     public record RecommendationRequest(
             String regionId,
             String regionName,
-            @Min(0) @Max(100) int localRatio,
-            List<String> selectedThemes,
-            String duration
-    ) {}
 
-    public record Summary(String duration, String distance, int localRatio, String budget) {}
+            @Min(0)
+            @Max(100)
+            int localRatio,
+
+            List<String> selectedThemes,
+
+            String duration
+    ) {
+    }
+
+
+    // ============================================================
+    // Spring → Python
+    // ============================================================
+
+    public record PythonRecommendRequest(
+            String sido,
+            String sigungu,
+            String trip,
+            List<String> categories,
+            String start_time
+    ) {
+    }
+
+
+    // ============================================================
+    // Python → Spring
+    // ============================================================
+
+    public record PythonStop(
+            Integer day,
+            Integer order,
+
+            String arrivalTime,
+            String departureTime,
+
+            String name,
+            String category,
+            String subCategory,
+
+            Double placeScore,
+            Double routeScore,
+            Double travelMinutes,
+
+            Double latitude,
+            Double longitude
+    ) {
+    }
+
+
+    public record PythonRecommendResponse(
+            String status,
+
+            String sido,
+            String sigungu,
+
+            String trip,
+
+            List<String> categories,
+
+            String startTime,
+
+            Map<String, Object> summary,
+
+            List<PythonStop> stops
+    ) {
+    }
+
+
+    // ============================================================
+    // Spring → React
+    // ============================================================
+
+    public record Summary(
+            String duration,
+            String distance,
+            int localRatio,
+            String budget
+    ) {
+    }
+
 
     public record Stop(
             String id,
             int order,
+
             String name,
             String type,
+
             String stay,
+
             Double localScore,
+
             String address,
+
             Double latitude,
             Double longitude,
+
             String reason,
+
             boolean sampleData
-    ) {}
+    ) {
+    }
+
 
     public record RecommendationResponse(
             String id,
+
             String regionName,
+
             Summary summary,
+
             List<Stop> stops,
+
             String dataStatus,
+
             String notice
-    ) {}
+    ) {
+    }
 }
