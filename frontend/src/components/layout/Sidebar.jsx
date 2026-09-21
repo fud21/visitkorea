@@ -22,9 +22,9 @@ const menu = [
     label: "지도 탐색",
   },
   {
-    to: "/map",
+    to: "/discover",
     icon: MapPinned,
-    label: "지역 랭킹",
+    label: "지역 발견",
   },
   {
     to: "/course/setup",

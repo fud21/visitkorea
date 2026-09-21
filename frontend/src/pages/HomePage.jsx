@@ -9,16 +9,30 @@ import { useNavigate } from "react-router-dom";
 import heroIllustration from "../assets/home.png";
 import { fetchRegions } from "../api/tourismApi";
 import { useApiResource } from "../hooks/useApiResource";
+import { provinceVisitors } from "../data/visitorData";
+import { regionImages } from "../data/regionImages";
+
+const fallbackRegions = provinceVisitors.map((region, index) => ({
+  id: region.province,
+  name: region.province,
+  visitorRatio: region.visitorRatio,
+  rank: index + 1,
+}));
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const regionResource = useApiResource(fetchRegions, [], []);
+  const regionResource = useApiResource(
+    fetchRegions,
+    [],
+    fallbackRegions
+  );
   const discoveryRegions = regionResource.data.slice(0, 4).map((region, index) => ({
     ...region,
     rank: String(index + 1).padStart(2, "0"),
     province: "전국 방문 데이터",
     type: `방문 비중 ${Number(region.visitorRatio).toFixed(1)}%`,
     imageClass: `region-image-${index + 1}`,
+    image: regionImages[region.name],
   }));
 
   return (
@@ -66,23 +80,23 @@ export default function HomePage() {
 
         {/* */}
         <div className="home-hero-visual">
-            <div className="hero-image-card">
-                <img
-                src={heroIllustration}
-                alt="지역 관광과 로컬 여행을 연결하는 서비스 일러스트"
-                className="hero-illustration"
-                />
+          <div className="hero-image-card">
+            <img
+              src={heroIllustration}
+              alt="지역 관광과 로컬 여행을 연결하는 서비스 일러스트"
+              className="hero-illustration"
+            />
 
-                <div className="hero-visual-label">
-                <Sparkles size={17} />
+            <div className="hero-visual-label">
+              <Sparkles size={17} />
 
-                <div>
-                    <strong>LOCAL:ON</strong>
-                    <span>지역으로 이어지는 여행</span>
-                </div>
-                </div>
+              <div>
+                <strong>LOCAL:ON</strong>
+                <span>지역으로 이어지는 여행</span>
+              </div>
             </div>
-            </div>
+          </div>
+        </div>
       </section>
 
       {/* DISCOVERY */}
@@ -106,7 +120,7 @@ export default function HomePage() {
           <button
             type="button"
             className="home-more-button"
-            onClick={() => navigate("/map")}
+            onClick={() => navigate("/discover")}
           >
             전체 지역 보기
             <ArrowRight size={16} />
@@ -129,6 +143,13 @@ export default function HomePage() {
               <div
                 className={`home-region-image ${region.imageClass}`}
               >
+                {region.image && (
+                  <img
+                    src={region.image}
+                    alt={`${region.name} 지역 일러스트`}
+                    className="home-region-art"
+                  />
+                )}
                 <span className="home-region-rank">
                   {region.rank}
                 </span>

@@ -13,6 +13,9 @@ import HomePage
 import MapExplorePage
   from "./pages/MapExplorePage";
 
+import RegionDiscoveryPage
+  from "./pages/RegionDiscoveryPage";
+
 import RegionPage
   from "./pages/RegionPage";
 
@@ -40,6 +43,11 @@ export default function App() {
         <Route
           path="/map"
           element={<MapExplorePage />}
+        />
+
+        <Route
+          path="/discover"
+          element={<RegionDiscoveryPage />}
         />
 
         <Route
