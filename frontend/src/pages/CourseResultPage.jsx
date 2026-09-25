@@ -117,7 +117,7 @@ export default function CourseResultPage() {
       <div className="metric-grid four">
         <MetricCard label="예상 운전시간" value={formatMinutes(totalDrivingMinutes)} />
         <MetricCard label="직선 이동거리" value={measuredLegs.length ? `약 ${totalStraightKm.toFixed(1)} km` : "-"} />
-        <MetricCard label="평균 현지인 점수" value={`${result.summary.localRatio}점`} />
+        <MetricCard label="로컬 선호 비율" value={`${result.summary.localRatio}%`} />
         <MetricCard label="예상 비용" value={result.summary.budget} />
       </div>
 
