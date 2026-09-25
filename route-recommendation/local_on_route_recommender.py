@@ -432,6 +432,377 @@ def get_region_ranking(
         ]
     ]
 
+def get_discover_top_regions(
+    region_df: pd.DataFrame,
+    limit: int = 4,
+) -> pd.DataFrame:
+    """
+    홈 / 지역발견 화면용
+    전국 로컬발견가능성 상위 지역 반환
+    """
+
+    if limit <= 0:
+        raise ValueError("limit은 1 이상이어야 합니다.")
+
+    # 로컬발견가능성 정식 점수가 있는 지역만 사용
+    x = region_df[
+        region_df["로컬발견가능성"].notna()
+    ].copy()
+
+    if x.empty:
+        raise ValueError(
+            "로컬발견가능성 점수가 있는 지역이 없습니다."
+        )
+
+    # 전국 기준 로컬발견가능성 높은 순 정렬
+    x = x.sort_values(
+        [
+            "로컬발견가능성",
+            "시도",
+            "시군구",
+        ],
+        ascending=[
+            False,
+            True,
+            True,
+        ],
+    ).head(limit)
+
+    x["지역추천구분"] = "정식_12개월"
+    x["지역추천점수"] = x["로컬발견가능성"]
+
+    x["전국순위"] = np.arange(
+        1,
+        len(x) + 1,
+    )
+
+    return x[
+        [
+            "시도",
+            "시군구",
+            "데이터개월수",
+            "신뢰도",
+            "지역추천구분",
+            "지역추천점수",
+            "전국순위",
+            "로컬발견가능성",
+        ]
+    ].reset_index(drop=True)
+
+def get_discover_region_candidates_by_type(
+    region_df: pd.DataFrame,
+    discovery_type: str,
+) -> pd.DataFrame:
+    """
+    지역 발견 화면의 여행 유형별 후보 지역을 생성한다.
+
+    discovery_type:
+    - quiet  : 한적한 곳
+    - rising : 요즘 뜨는 곳
+    - sea    : 바다가 있는 곳
+    - market  : 전통시장
+    - culture : 문화·역사
+    - food    : 맛집 여행
+    - nature  : 자연·힐링
+
+    최종 순위는 여기서 결정하지 않고,
+    후보 지역만 추린다.
+    """
+
+    # 정식 로컬발견가능성 점수가 있는 지역만 사용
+    x = region_df[
+        region_df["로컬발견가능성"].notna()
+    ].copy()
+
+    if x.empty:
+        raise ValueError(
+            "로컬발견가능성 점수가 있는 지역이 없습니다."
+        )
+
+    # --------------------------------------------------------
+    # 한적한 곳
+    # 최근 3개월 평균 방문자수가 적은 지역을 후보로 사용
+    # --------------------------------------------------------
+    if discovery_type == "quiet":
+
+        x["최근3개월평균방문자수"] = to_numeric(
+            x["최근3개월평균방문자수"]
+        )
+
+        x = x[
+            x["최근3개월평균방문자수"].notna()
+        ].copy()
+
+        # 방문자수가 적은 하위 40%를 '한적한 지역' 후보로 사용
+        threshold = x[
+            "최근3개월평균방문자수"
+        ].quantile(0.40)
+
+        return x[
+            x["최근3개월평균방문자수"]
+            <= threshold
+        ].copy()
+
+    # --------------------------------------------------------
+    # 요즘 뜨는 곳
+    # 최근 3개월 증가율이 높은 지역을 후보로 사용
+    # --------------------------------------------------------
+    if discovery_type == "rising":
+
+        x["최근3개월증가율"] = to_numeric(
+            x["최근3개월증가율"]
+        )
+
+        x = x[
+            x["최근3개월증가율"].notna()
+        ].copy()
+
+        # 최근 증가율 상위 40%를 '요즘 뜨는 지역' 후보로 사용
+        threshold = x[
+            "최근3개월증가율"
+        ].quantile(0.60)
+
+        return x[
+            x["최근3개월증가율"]
+            >= threshold
+        ].copy()
+    if discovery_type == "sea":
+
+        tour, _ = load_tour_places(
+            BASE_DIR,
+            region_df,
+        )
+
+        place_name = (
+            tour["장소명"]
+            .fillna("")
+            .astype(str)
+        )
+
+        sea_places = tour[
+            place_name.str.contains(
+                r"해수욕|해변|바다|포구|항구|등대|갯벌|방파제",
+                regex=True,
+                na=False,
+            )
+        ].copy()
+
+        sea_counts = (
+            sea_places
+            .groupby(
+                ["시도", "시군구"]
+            )
+            .size()
+            .reset_index(
+                name="바다관광지수"
+            )
+        )
+
+        sea_counts = sea_counts[
+            sea_counts["바다관광지수"] >= 3
+        ].copy()
+
+        return x.merge(
+            sea_counts,
+            on=["시도", "시군구"],
+            how="inner",
+        )
+    if discovery_type == "market":
+
+        market, _ = load_market_places(
+            BASE_DIR,
+            region_df,
+        )
+
+        market_counts = (
+            market
+            .groupby(
+                ["시도", "시군구"]
+            )
+            .size()
+            .reset_index(
+                name="전통시장수"
+            )
+        )
+
+        market_counts = market_counts[
+            market_counts["전통시장수"] >= 3
+        ].copy()
+
+        return x.merge(
+            market_counts,
+            on=["시도", "시군구"],
+            how="inner",
+        )
+    
+    if discovery_type == "culture":
+
+        tour, _ = load_tour_places(
+            BASE_DIR,
+            region_df,
+        )
+
+        tour["문화역사점수"] = tour.apply(
+            calculate_theme_fit_score,
+            axis=1,
+            theme="문화/역사",
+        )
+
+        culture_places = tour[
+            tour["문화역사점수"] >= 90
+        ].copy()
+
+        culture_counts = (
+            culture_places
+            .groupby(
+                ["시도", "시군구"]
+            )
+            .size()
+            .reset_index(
+                name="문화역사관광지수"
+            )
+        )
+
+        # 문화·역사 관련 관광지가 5개 이상인 지역만 후보
+        culture_counts = culture_counts[
+            culture_counts["문화역사관광지수"] >= 5
+        ].copy()
+
+        return x.merge(
+            culture_counts,
+            on=["시도", "시군구"],
+            how="inner",
+        )
+    if discovery_type == "food":
+
+        restaurant, _ = load_restaurant_places(
+            BASE_DIR
+        )
+
+        food_places = restaurant[
+            restaurant["추천카테고리"] == "맛집"
+        ].copy()
+
+        food_counts = (
+            food_places
+            .groupby(
+                ["시도", "시군구"]
+            )
+            .size()
+            .reset_index(
+                name="맛집수"
+            )
+        )
+
+        food_regions = x.merge(
+            food_counts,
+            on=["시도", "시군구"],
+            how="inner",
+        )
+
+        if food_regions.empty:
+            return food_regions
+
+        threshold = food_regions[
+            "맛집수"
+        ].quantile(0.80)
+
+        return food_regions[
+            food_regions["맛집수"] >= threshold
+        ].copy()
+
+    if discovery_type == "nature":
+
+        tour, _ = load_tour_places(
+            BASE_DIR,
+            region_df,
+        )
+
+        tour["자연힐링점수"] = tour.apply(
+            calculate_theme_fit_score,
+            axis=1,
+            theme="자연/힐링",
+        )
+
+        nature_places = tour[
+            tour["자연힐링점수"] >= 90
+        ].copy()
+
+        nature_counts = (
+            nature_places
+            .groupby(
+                ["시도", "시군구"]
+            )
+            .size()
+            .reset_index(
+                name="자연힐링관광지수"
+            )
+        )
+
+        nature_regions = x.merge(
+            nature_counts,
+            on=["시도", "시군구"],
+            how="inner",
+        )
+
+        if nature_regions.empty:
+            return nature_regions
+
+        threshold = nature_regions[
+            "자연힐링관광지수"
+        ].quantile(0.80)
+
+        return nature_regions[
+            nature_regions["자연힐링관광지수"]
+            >= threshold
+        ].copy()
+
+    raise ValueError(
+        f"지원하지 않는 discovery_type: {discovery_type}"
+    )
+
+def get_discover_top_regions_by_type(
+    region_df: pd.DataFrame,
+    discovery_type: str,
+    limit: int = 4,
+) -> pd.DataFrame:
+    """
+    여행 유형에 맞는 후보 지역을 먼저 추린 뒤
+    로컬발견가능성 점수 기준 TOP N을 반환한다.
+    """
+
+    candidates = get_discover_region_candidates_by_type(
+        region_df,
+        discovery_type,
+    )
+
+    if candidates.empty:
+        raise ValueError(
+            f"{discovery_type} 조건에 맞는 지역이 없습니다."
+        )
+
+    result = candidates.sort_values(
+        [
+            "로컬발견가능성",
+            "시도",
+            "시군구",
+        ],
+        ascending=[
+            False,
+            True,
+            True,
+        ],
+    ).head(limit).copy()
+
+    result["지역추천구분"] = "정식_12개월"
+    result["지역추천점수"] = result["로컬발견가능성"]
+
+    result["전국순위"] = np.arange(
+        1,
+        len(result) + 1,
+    )
+
+    return result.reset_index(drop=True)
 
 # ============================================================
 # 4. 음식점 데이터
@@ -2503,8 +2874,8 @@ def add_personalized_scores(
     """
     후보를 자르기 전에 사용자 성향 점수를 계산한다.
 
-    1) 현지인순위 -> 로컬성향점수
-    2) 외지인순위 -> 유명성향점수
+    1) 현지인점수 -> 로컬성향점수
+    2) 외지인점수 -> 유명성향점수
     3) local_weight로 로컬/유명 비율 반영
     4) 관광테마 적합도 반영
     5) 최종 개인화점수 생성
@@ -2538,18 +2909,12 @@ def add_personalized_scores(
         - local_weight
     )
 
-    x["로컬성향점수"] = (
-        x["현지인순위"]
-        .apply(
-            rank_to_preference_score
-        )
+    x["로컬성향점수"] = to_numeric(
+        x["현지인점수"]
     )
 
-    x["유명성향점수"] = (
-        x["외지인순위"]
-        .apply(
-            rank_to_preference_score
-        )
+    x["유명성향점수"] = to_numeric(
+        x["외지인점수"]
     )
 
     # 순위 데이터가 없는 장소용 기본점수:
@@ -4825,9 +5190,9 @@ def recommend_local_on_trip(
                 "장소추천점수":
                     "원본 데이터의 카테고리 내부 참고 점수",
                 "로컬성향점수":
-                    "현지인순위를 1~100 공통척도로 변환",
+                    "현지인점수 사용",
                 "유명성향점수":
-                    "외지인순위를 1~100 공통척도로 변환",
+                    "외지인점수 사용",
                 "개인화점수":
                     (
                         "로컬/유명 가중치와 관광성향 적합도를 "

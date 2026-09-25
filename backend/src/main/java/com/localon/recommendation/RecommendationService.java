@@ -138,7 +138,8 @@ public class RecommendationService {
                         sigungu,
                         trip,
                         categories,
-                        "10:00"
+                        "10:00",
+                        request.localRatio() / 100.0
                 );
 
 
@@ -706,7 +707,8 @@ public class RecommendationService {
             String sigungu,
             String trip,
             List<String> categories,
-            String start_time
+            String start_tim,
+            double local_weight
     ) {
     }
 

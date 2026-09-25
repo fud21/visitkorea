@@ -7,6 +7,12 @@ import sys
 import json
 import pandas as pd
 
+from local_on_route_recommender import (
+    BASE_DIR,
+    load_region_scores,
+    get_discover_top_regions,
+    get_discover_top_regions_by_type,
+)
 
 app = FastAPI()
 
@@ -46,6 +52,7 @@ class RecommendRequest(BaseModel):
 
     start_time: str = "10:00"
 
+    local_weight: float = 0.6
 
 # ============================================================
 # Health Check
@@ -59,7 +66,107 @@ def health():
         "service": "route-recommendation"
     }
 
+# ============================================================
+# 지역 발견 API
+# ============================================================
 
+@app.get("/discover")
+def discover(
+    type: str | None = None,
+    limit: int = 4,
+):
+
+    try:
+
+        region_df = load_region_scores(
+            BASE_DIR
+        )
+
+        # 아무 여행 유형도 선택하지 않은 기본 화면
+        if type is None or type == "default":
+
+            result = get_discover_top_regions(
+                region_df,
+                limit,
+            )
+
+        # 여행 유형을 선택한 경우
+        else:
+
+            result = get_discover_top_regions_by_type(
+                region_df,
+                type,
+                limit,
+            )
+
+        regions = []
+
+        for _, row in result.iterrows():
+
+            item = {
+                "rank": int(row["전국순위"]),
+                "sido": str(row["시도"]),
+                "sigungu": str(row["시군구"]),
+                "score": float(row["로컬발견가능성"]),
+            }
+
+            # 유형별 추가 정보가 있으면 같이 전달
+            if "최근3개월평균방문자수" in result.columns:
+                value = row["최근3개월평균방문자수"]
+                if pd.notna(value):
+                    item["recentVisitors"] = float(value)
+
+            if "최근3개월증가율" in result.columns:
+                value = row["최근3개월증가율"]
+                if pd.notna(value):
+                    item["growthRate"] = float(value)
+
+            if "바다관광지수" in result.columns:
+                item["seaPlaceCount"] = int(
+                    row["바다관광지수"]
+                )
+
+            if "전통시장수" in result.columns:
+                item["marketCount"] = int(
+                    row["전통시장수"]
+                )
+
+            if "문화역사관광지수" in result.columns:
+                item["culturePlaceCount"] = int(
+                    row["문화역사관광지수"]
+                )
+
+            if "맛집수" in result.columns:
+                item["foodCount"] = int(
+                    row["맛집수"]
+                )
+
+            if "자연힐링관광지수" in result.columns:
+                item["naturePlaceCount"] = int(
+                    row["자연힐링관광지수"]
+                )
+
+            regions.append(item)
+
+        return {
+            "status": "success",
+            "type": type or "default",
+            "regions": regions,
+        }
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
 # ============================================================
 # 추천 API
 # ============================================================
@@ -86,6 +193,9 @@ def recommend(request: RecommendRequest):
 
         "--start-time",
         request.start_time,
+
+        "--local-weight",
+        str(request.local_weight)
     ]
 
 
